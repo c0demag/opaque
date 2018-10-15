@@ -84,3 +84,4 @@ hs_err_pid*.log
 /data/pagerank
 !/data/pagerank/PageRank256.in
 /data/disease/*.csv
+/bin/

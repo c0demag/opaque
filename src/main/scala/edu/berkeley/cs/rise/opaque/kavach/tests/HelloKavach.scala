@@ -17,11 +17,38 @@
 
 package edu.berkeley.cs.rise.opaque.kavach.tests
 
+import edu.berkeley.cs.rise.opaque.implicits._
 import edu.berkeley.cs.rise.opaque.Utils
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions.lit
 
 object HelloKavach {
   def main(args: Array[String]): Unit = {
-    println("Hello, Kavach!")
+    val spark = SparkSession.builder()
+      .appName("KavachToyBenchmark1")
+      .getOrCreate()
+    import spark.implicits._
+
+    // Initialize SQL context.
+    Utils.initSQLContext(spark.sqlContext)
+
+    // create a dataframe.
+    val data = Seq(("foo", 4), ("bar", 1), ("baz", 5))
+    val df = spark.createDataFrame(data).toDF("word", "count")
+    // encrypt it.
+    val dfEncrypted = df.encrypted
+    // use it for processing.
+    val result = dfEncrypted.filter($"count" > lit(3))
+    // display
+    result.show
+    // now save it to a file.
+    dfEncrypted.write.format("edu.berkeley.cs.rise.opaque.EncryptedSource").save("dfEncrypted")
+    // read from a file.
+    import org.apache.spark.sql.types._
+    val df2 = (spark.read.format("edu.berkeley.cs.rise.opaque.EncryptedSource")
+                .schema(StructType(Seq(StructField("word", StringType), StructField("count", IntegerType))))
+                .load("dfEncrypted"))
+    // display fields
+    df2.show
   }
 }
