@@ -17,29 +17,6 @@
 
 package edu.berkeley.cs.rise.opaque.kavach
 
-/** Base class for DataTransformer, which will be applied on data that has
- *  policies associated with it.
- * 
- * One can imagine various types of function applications identified by
- * measurements, credentials, etc. Right now the only sub-class supported
- * NamedDataTransformer, which identifies functions using strings that
- * represent their names.
- */
-sealed abstract class DataTransformer
-
-/** NamedDataTransformer is a sub-class of FunctionIdentifier that
- *  identifies functions by their name.
- *
- */
-case class NamedDataTransformer(name: String) extends DataTransformer {
-  override def equals(that: Any) : Boolean = {
-    that match {
-      case that: NamedDataTransformer => name == that.name
-      case _ => false
-    }
-  }
-}
-
 /**
  * This is the exception raised when the policy is not followed.
  */
@@ -49,19 +26,82 @@ final case class PolicyException(
   extends Exception(message, cause)
 
 /**
- * Each state in the policy state machine.
+ * This is the exception raised when a function is not implemented.
  */
-case class PolicyState(
-  name: String, transitions: List[(DataTransformer, PolicyState)])
-{
+final case class NotImplementedException(
+    private val message: String,
+    private val cause: Throwable = None.orNull)
+  extends Exception(message, cause)
+
+/** Base class for KavachTransformer, which will be applied on data that has
+ *  policies associated with it.
+ * 
+ * One can imagine various types of function applications identified by
+ * measurements, credentials, etc. Right now the only sub-class supported
+ * NamedKavachTransformer, which identifies functions using strings that
+ * represent their names.
+ */
+sealed abstract trait KavachTransformer {
+  def apply(data : KavachData) : KavachData = {
+    throw new NotImplementedException("apply not implemented")
+  }
+
+  def apply2(d1 : KavachData, d2 : KavachData) : KavachData = {
+    throw new NotImplementedException("apply2 not implemented")
+  }
+  // TODO: more such functions ...
+}
+
+/** NamedKavachTransformer is a sub-class of KavachTransformer that
+ *  identifies functions by their name.
+ */
+trait NamedKavachTransformer extends KavachTransformer {
+  val name: String
+  override def equals(that: Any) : Boolean = {
+    that match {
+      case that: NamedKavachTransformer => name == that.name
+      case _ => false
+    }
+  }
+}
+
+/** Base class for KavachDeclassifier, which will be applied on data that has
+ *  policies associated with it.
+ */ 
+sealed abstract trait KavachDeclassifier {
+  def declassify(data : KavachData) : Any = {
+    throw new NotImplementedException("declassify not implemented")
+  }
+  // TODO: more such functions ...
+}
+
+/** NamedKavachDeclassifer is a sub-class of KavachDeclassifer that
+ *  identifies functions by their name.
+ */
+trait NamedKavachDeclassifier extends KavachDeclassifier {
+  val name: String
+  override def equals(that: Any) : Boolean = {
+    that match {
+      case that: NamedKavachDeclassifier => name == that.name
+      case _ => false
+    }
+  }
+}
+
+/** Each state in the policy state machine.
+ */
+trait PolicyState {
+  val name: String
+  val transitions: List[(KavachTransformer, PolicyState)]
+  val declassifications: List[KavachDeclassifier]
+
   override def toString = "PolicyState(%s)".format(name)
 }
 
-/**
- * This is the class that represents policies.
+/** This is the class that represents policies.
  */
 case class PolicyFSM(currentState : PolicyState) {
-  def transition(fnId : DataTransformer) : PolicyFSM = {
+  def transition(fnId : KavachTransformer) : PolicyFSM = {
     val nextStates = currentState.transitions.find(p => p._1.equals(fnId))
     nextStates match {
       case Some(p) => PolicyFSM(p._2)
@@ -74,6 +114,31 @@ case class PolicyFSM(currentState : PolicyState) {
 
 /** This is the base class for all data which has a policy associated with it.
  */
-trait PolicyEnforcingData {
-  var currentPolicyState : PolicyFSM
+trait KavachData {
+  val kavachState : PolicyFSM
+  def withPolicyState(st : PolicyFSM) : KavachData
+}
+
+/** Top-level Kavach data.
+ */
+object Kavach {
+  def apply(data : KavachData, f : KavachTransformer) : KavachData = {
+    val startState = data.kavachState
+    val endState = startState.transition(f)
+    val newData = f.apply(data)
+    val newDataP = newData.withPolicyState(endState)
+    if(newDataP.kavachState != endState) {
+      throw new PolicyException("Invalid policy end-state.")
+    }
+    newDataP
+  }
+  def declassify(data : KavachData, f : KavachDeclassifier) : Any = {
+    val st = data.kavachState.currentState
+    if (st.declassifications.find(p => p.equals(f)).isDefined) {
+      f.declassify(data)
+    } else {
+      val msg = "Invalid policy declassification: %s".format(st.toString)
+      throw new PolicyException(msg)
+    }
+  }
 }

@@ -21,7 +21,33 @@ import edu.berkeley.cs.rise.opaque.kavach._
 
 object HelloPolicies
 {
+  case class VoteData(id : Integer, choice : String) extends KavachData {
+    override val kavachState = PolicyFSM(VotePolicyS1)
+    override def withPolicyState(st : PolicyFSM) = this
+  }
+
+  case object GetVoteId extends NamedKavachDeclassifier {
+    override val name = "GetVoteId"
+    override def declassify(vote : KavachData) : Integer =
+      vote.asInstanceOf[VoteData].id
+  }
+
+  case object GetVoteChoice extends NamedKavachDeclassifier {
+    override val name = "GetVoteChoice"
+    override def declassify(vote : KavachData) : String =
+      vote.asInstanceOf[VoteData].choice
+  }
+
+  case object VotePolicyS1 extends PolicyState
+  {
+    override val name = "S1"
+    override val transitions = List.empty
+    override val declassifications = List(GetVoteId, GetVoteChoice)
+  }
+
+
   def main(args: Array[String]): Unit = {
-    println("Hello, guys!")
+    val vote = VoteData(1, "opaque")
+    println(Kavach.declassify(vote, GetVoteChoice))
   }
 }
