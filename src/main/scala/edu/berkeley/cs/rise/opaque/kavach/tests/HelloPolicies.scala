@@ -21,33 +21,20 @@ import edu.berkeley.cs.rise.opaque.kavach._
 
 object HelloPolicies
 {
-  case class VoteData(id : Integer, choice : String) extends KavachData {
-    override val kavachState = PolicyFSM(VotePolicyS1)
-    override def withPolicyState(st : PolicyFSM) = this
-  }
+  case class VoteData(id : Integer, choice : String)
 
-  case object GetVoteId extends NamedKavachDeclassifier {
-    override val name = "GetVoteId"
-    override def declassify(vote : KavachData) : Integer =
-      vote.asInstanceOf[VoteData].id
-  }
-
-  case object GetVoteChoice extends NamedKavachDeclassifier {
-    override val name = "GetVoteChoice"
-    override def declassify(vote : KavachData) : String =
-      vote.asInstanceOf[VoteData].choice
-  }
-
-  case object VotePolicyS1 extends PolicyState
-  {
-    override val name = "S1"
-    override val transitions = List.empty
-    override val declassifications = List(GetVoteId, GetVoteChoice)
-  }
+  def readVoteId(v : VoteData) : Integer = v.id
+  def readVoteChoice(v : VoteData) : String = v.choice
+  val deReadVoteId = NamedKavachDeclassifier1("readVoteId", readVoteId)
+  val deReadVoteChoice = NamedKavachDeclassifier1("readVoteChoice", readVoteChoice)
+  val fsm = PolicyFSM("S1", Map.empty, Set(("S2", deReadVoteId), ("S1", deReadVoteChoice)))
 
 
   def main(args: Array[String]): Unit = {
-    val vote = VoteData(1, "opaque")
-    println(Kavach.declassify(vote, GetVoteChoice))
+    val vote = new KavachData(fsm, VoteData(1, "opaque"))
+    println("choice: " + Kavach.declassify(vote, deReadVoteChoice))
+    // The next line will throw a policy exception because deReadVoteId is only
+    // allowed in state S2, but we are currently in state S1.
+    // println("id: " + Kavach.declassify(vote, deReadVoteId))
   }
 }

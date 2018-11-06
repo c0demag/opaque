@@ -41,22 +41,14 @@ final case class NotImplementedException(
  * NamedKavachTransformer, which identifies functions using strings that
  * represent their names.
  */
-sealed abstract trait KavachTransformer {
-  def apply(data : KavachData) : KavachData = {
-    throw new NotImplementedException("apply not implemented")
-  }
-
-  def apply2(d1 : KavachData, d2 : KavachData) : KavachData = {
-    throw new NotImplementedException("apply2 not implemented")
-  }
-  // TODO: more such functions ...
-}
+sealed abstract trait KavachTransformer
 
 /** NamedKavachTransformer is a sub-class of KavachTransformer that
  *  identifies functions by their name.
  */
-trait NamedKavachTransformer extends KavachTransformer {
-  val name: String
+abstract class NamedKavachTransformer(val name: String)
+  extends KavachTransformer
+{
   override def equals(that: Any) : Boolean = {
     that match {
       case that: NamedKavachTransformer => name == that.name
@@ -68,18 +60,14 @@ trait NamedKavachTransformer extends KavachTransformer {
 /** Base class for KavachDeclassifier, which will be applied on data that has
  *  policies associated with it.
  */ 
-sealed abstract trait KavachDeclassifier {
-  def declassify(data : KavachData) : Any = {
-    throw new NotImplementedException("declassify not implemented")
-  }
-  // TODO: more such functions ...
-}
+abstract trait KavachDeclassifier
 
 /** NamedKavachDeclassifer is a sub-class of KavachDeclassifer that
  *  identifies functions by their name.
  */
-trait NamedKavachDeclassifier extends KavachDeclassifier {
-  val name: String
+abstract class NamedKavachDeclassifier(val name: String)
+  extends KavachDeclassifier
+{
   override def equals(that: Any) : Boolean = {
     that match {
       case that: NamedKavachDeclassifier => name == that.name
@@ -88,57 +76,62 @@ trait NamedKavachDeclassifier extends KavachDeclassifier {
   }
 }
 
-/** Each state in the policy state machine.
+/** NamedKavachDeclassifier1 is a sub-class of NamedKavachDeclassifier
+ *  that applies a function on one KavachData.
  */
-trait PolicyState {
-  val name: String
-  val transitions: List[(KavachTransformer, PolicyState)]
-  val declassifications: List[KavachDeclassifier]
-
-  override def toString = "PolicyState(%s)".format(name)
+case class NamedKavachDeclassifier1[U, V](n : String, f : (U => V))
+  extends NamedKavachDeclassifier(n) 
+{
+  def apply(data : U) : V = f(data)
 }
+
 
 /** This is the class that represents policies.
  */
-case class PolicyFSM(currentState : PolicyState) {
+case class PolicyFSM(
+  currentSt : String,
+  transitions : Map[(String, KavachTransformer), String],
+  declassifications : Set[(String, KavachDeclassifier)]
+)
+{
   def transition(fnId : KavachTransformer) : PolicyFSM = {
-    val nextStates = currentState.transitions.find(p => p._1.equals(fnId))
-    nextStates match {
-      case Some(p) => PolicyFSM(p._2)
+    transitions.get((currentSt, fnId)) match {
+      case Some(nextSt) => PolicyFSM(nextSt, transitions, declassifications)
       case None =>
-        val msg = "Invalid policy transition in %s".format(currentState.toString)
+        val msg = "Invalid policy transition in %s".format(currentSt)
         throw PolicyException(msg)
     }
   }
+  def canDeclassify(fnId : KavachDeclassifier) : Boolean = {
+    declassifications.contains((currentSt, fnId)) 
+  }
+  def addTransformer(st : String, tx : KavachTransformer, stP : String) =
+    PolicyFSM(currentSt, transitions + ((st, tx) -> stP), declassifications)
+
+  def addDeclassify(st : String, tx : KavachDeclassifier) =
+    PolicyFSM(currentSt, transitions, declassifications + ((st, tx)))
 }
 
 /** This is the base class for all data which has a policy associated with it.
  */
-trait KavachData {
-  val kavachState : PolicyFSM
-  def withPolicyState(st : PolicyFSM) : KavachData
+class KavachData[T](val kavachState : PolicyFSM, val data : T) {
 }
 
 /** Top-level Kavach data.
  */
 object Kavach {
-  def apply(data : KavachData, f : KavachTransformer) : KavachData = {
-    val startState = data.kavachState
-    val endState = startState.transition(f)
-    val newData = f.apply(data)
-    val newDataP = newData.withPolicyState(endState)
-    if(newDataP.kavachState != endState) {
-      throw new PolicyException("Invalid policy end-state.")
-    }
-    newDataP
+  def apply[U, V](wrapper : KavachData[U], tx: KavachTransformer, f : (U => V)) : KavachData[V] = {
+    val startState = wrapper.kavachState
+    val endState = startState.transition(tx)
+    val newData = f(wrapper.data)
+    new KavachData[V](endState, newData)
   }
-  def declassify(data : KavachData, f : KavachDeclassifier) : Any = {
-    val st = data.kavachState.currentState
-    if (st.declassifications.find(p => p.equals(f)).isDefined) {
-      f.declassify(data)
+  def declassify[U, V](wrapper : KavachData[U], f : NamedKavachDeclassifier1[U, V]) : V = {
+    if (wrapper.kavachState.canDeclassify(f)) {
+      f(wrapper.data)
     } else {
-      val msg = "Invalid policy declassification: %s".format(st.toString)
-      throw new PolicyException(msg)
+      val msg = "Invalid policy declassification in %s".format(wrapper.kavachState.currentSt)
+      throw PolicyException(msg)
     }
   }
 }
