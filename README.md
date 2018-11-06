@@ -1,3 +1,9 @@
+## Kavach Modifications
+
+To run the HelloKavach program use the command:
+
+    $ <SPARK-DIR>/bin/spark-submit --class edu.berkeley.cs.rise.opaque.kavach.tests.HelloKavach <OPAQUE-DIR>/target/scala-2.11/opaque_2.11-0.1.jar
+
 <img src="https://ucbrise.github.io/opaque/opaque.svg" width="315" alt="Opaque">
 
 **Secure Apache Spark SQL**
@@ -145,3 +151,4 @@ Next, run Apache Spark SQL queries with Opaque as follows, assuming [Spark 2.3.2
 ## Contact
 
 If you want to know more about our project or have questions, please contact Wenting (wzheng@eecs.berkeley.edu) and/or Ankur (ankurdave@gmail.com).
+
