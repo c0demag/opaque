@@ -27,7 +27,7 @@ object HelloPolicies
   def readVoteChoice(v : VoteData) : String = v.choice
   val deReadVoteId = NamedKavachDeclassifier1("readVoteId", readVoteId)
   val deReadVoteChoice = NamedKavachDeclassifier1("readVoteChoice", readVoteChoice)
-  val fsm = PolicyFSM("S1", Map.empty, Set(("S2", deReadVoteId), ("S1", deReadVoteChoice)))
+  val fsm = List(PolicyFSM("S1", Map.empty, Set(("S2", deReadVoteId), ("S1", deReadVoteChoice))))
 
 
   def main(args: Array[String]): Unit = {

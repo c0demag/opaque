@@ -57,6 +57,15 @@ abstract class NamedKavachTransformer(val name: String)
   }
 }
 
+/** NamedKavachTransformer1 is a sub-class of NamedKavachTransformer
+ *  that applies a function on one KavachData.
+ */
+case class NamedKavachTransformer1[U, V](n : String, f : (U => V))
+  extends NamedKavachTransformer(n)
+{
+  def apply(data : U) : V = f(data)
+}
+
 /** Base class for KavachDeclassifier, which will be applied on data that has
  *  policies associated with it.
  */ 
@@ -105,33 +114,26 @@ case class PolicyFSM(
   def canDeclassify(fnId : KavachDeclassifier) : Boolean = {
     declassifications.contains((currentSt, fnId)) 
   }
-  def addTransformer(st : String, tx : KavachTransformer, stP : String) =
-    PolicyFSM(currentSt, transitions + ((st, tx) -> stP), declassifications)
-
-  def addDeclassify(st : String, tx : KavachDeclassifier) =
-    PolicyFSM(currentSt, transitions, declassifications + ((st, tx)))
 }
 
 /** This is the base class for all data which has a policy associated with it.
  */
-class KavachData[T](val kavachState : PolicyFSM, val data : T) {
+class KavachData[T](val kavachStates : List[PolicyFSM], val data : T) {
 }
 
 /** Top-level Kavach data.
  */
 object Kavach {
-  def apply[U, V](wrapper : KavachData[U], tx: KavachTransformer, f : (U => V)) : KavachData[V] = {
-    val startState = wrapper.kavachState
-    val endState = startState.transition(tx)
-    val newData = f(wrapper.data)
-    new KavachData[V](endState, newData)
+  def apply[U, V](wrapper : KavachData[U], tx: NamedKavachTransformer1[U, V]) : KavachData[V] = {
+    val endStates = wrapper.kavachStates.map(_.transition(tx))
+    val newData = tx(wrapper.data)
+    new KavachData[V](endStates, newData)
   }
   def declassify[U, V](wrapper : KavachData[U], f : NamedKavachDeclassifier1[U, V]) : V = {
-    if (wrapper.kavachState.canDeclassify(f)) {
+    if (wrapper.kavachStates.forall(_.canDeclassify(f))) {
       f(wrapper.data)
     } else {
-      val msg = "Invalid policy declassification in %s".format(wrapper.kavachState.currentSt)
-      throw PolicyException(msg)
+      throw PolicyException("Invalid declassification according to policy")
     }
   }
 }
